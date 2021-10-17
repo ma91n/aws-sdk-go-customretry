@@ -1,0 +1,19 @@
+version:
+  '2.2'
+
+services:
+  localstack:
+    image: localstack/localstack:0.12.8
+    ports:
+      - 127.0.0.1:4566:4566/tcp
+    environment:
+      - SERVICES=kinesis #only using services
+      - DEBUG=debug
+      - DEFAULT_REGION=ap-northeast-1 # DynamoDBのテーブル作成先で利用
+      - KINESIS_ERROR_PROBABILITY=${KINESIS_ERROR_PROBABILITY- }
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "${TMPDIR:-/tmp/localstack}:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./localstack_init:/docker-entrypoint-initaws.d"
+      - "./server/testdata:/testdata"

@@ -1,4 +1,4 @@
-package customretry
+package main
 
 import (
 	"context"
@@ -9,22 +9,21 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"log"
 	"strings"
 )
 
-var (
-	kc = kinesis.New(session.Must(
-		session.NewSession(&aws.Config{
-			Retryer: CustomRetryer{
-				DefaultRetryer: client.DefaultRetryer{
-					NumMaxRetries: client.DefaultRetryerMaxNumRetries,
-				}},
-			Endpoint: aws.String("http://localhost:4566"),
-			Region:   aws.String(endpoints.ApNortheast1RegionID),
-		}),
-	))
-	outStream = "local-test-stream"
-)
+var kc = kinesis.New(session.Must(
+	session.NewSession(&aws.Config{
+		Retryer: CustomRetryer{
+			DefaultRetryer: client.DefaultRetryer{
+				NumMaxRetries: client.DefaultRetryerMaxNumRetries,
+			},
+		},
+		Endpoint: aws.String("http://localhost:4566"),
+		Region:   aws.String(endpoints.ApNortheast1RegionID),
+	}),
+))
 
 // CustomRetryer wraps the SDK's built in DefaultRetryer adding additional custom features.
 // read: connection reset時もリトライを許容する。At Least Onceになるが、登録APIは冪等なため許容する
@@ -42,21 +41,26 @@ func (r CustomRetryer) ShouldRetry(req *request.Request) bool {
 		case temporary:
 			if strings.Contains(origErr.Error(), "read: connection reset") {
 				// デフォルトのSDKではリトライしないが、リトライ可にする
-				// 直接ここで return trueすると、リトライ回数を無視することになるため、 retry stateを設定して
-				// デフォルトのリトライに委ねる
-				req.Retryable = aws.Bool(true)
+				return true
 			}
 		}
 	}
 	return r.DefaultRetryer.ShouldRetry(req)
 }
 
+func main() {
+	if err := PutAction(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("finished")
+}
+
 func PutAction(ctx context.Context) error {
 
 	_, err := kc.PutRecordWithContext(ctx, &kinesis.PutRecordInput{
-		StreamName:   aws.String(outStream),
+		StreamName:   aws.String("local-retrytest-stream"),
 		PartitionKey: aws.String("aaaa"),
-		Data:         []byte("aaaa"),
+		Data:         []byte("aaa"),
 	})
 	if err != nil {
 		return fmt.Errorf("kinesis put record with customretry : %w", err)
